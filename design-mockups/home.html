@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SonicRoom — Premium Experience</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400&display=swap" rel="stylesheet">
+<style>
+/* Reset & Base Setup */
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg: #000000;
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --glass-bg: rgba(20, 20, 20, 0.45);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --sidebar-width: 80px;
+}
+
+html { font-size: 16px; background-color: #000; }
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { display: none; }
+
+/* 
+ * 1. AMBIENT HERO SECTION 
+ */
+.ambient-hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 60vh;
+  min-height: 500px;
+  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=1200&q=80');
+  background-size: cover;
+  background-position: center;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.8) 40%, transparent 100%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.8) 40%, transparent 100%);
+  filter: blur(40px) saturate(150%);
+  transform: scale(1.1); 
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Base Container */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.content-wrapper {
+  position: relative;
+  z-index: 1;
+  padding-top: 50px;
+  padding-bottom: 120px; 
+  width: 100%;
+  max-width: 500px; /* Mobile max width */
+  margin: 0 auto;
+}
+
+/* 
+ * 2. HEADER
+ */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  margin-bottom: 32px;
+}
+.greeting {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.icon-btn {
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn svg { width: 24px; height: 24px; stroke-width: 1.5; }
+.avatar-profile {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--glass-border);
+}
+
+/* 
+ * 3. THE "SYNCHRONIZED ROOM" CARD
+ */
+.room-glass-card {
+  margin: 0 20px 40px;
+  border-radius: 28px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  padding: 24px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.room-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  box-shadow: 0 0 12px #22c55e;
+  animation: breathe 2s ease-in-out infinite alternate;
+}
+@keyframes breathe { 0% { opacity: 0.4; } 100% { opacity: 1; } }
+.status-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.room-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.room-artwork {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.room-meta {
+  flex: 1;
+}
+.room-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.room-artist {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.room-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.social-proof {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.avatar-stack {
+  display: flex;
+}
+.avatar-stack img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(30, 30, 30, 0.8);
+  margin-left: -10px;
+}
+.avatar-stack img:first-child { margin-left: 0; }
+.listener-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.drop-in-btn {
+  background: var(--text-primary);
+  color: var(--bg);
+  border: none;
+  border-radius: 100px;
+  padding: 10px 20px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.drop-in-btn:hover { transform: scale(1.05); }
+.drop-in-btn:active { transform: scale(0.95); }
+
+/* 
+ * 4. PREMIUM SECTIONS 
+ */
+.section {
+  margin-bottom: 40px;
+}
+.section-header {
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.section-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.section-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+/* Horizontal Scroll List */
+.scroll-track {
+  display: flex;
+  gap: 16px;
+  padding: 0 24px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.mix-card {
+  flex-shrink: 0;
+  width: 150px;
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+.mix-artwork {
+  width: 150px;
+  height: 150px;
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 12px;
+}
+.mix-artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.mix-card:hover .mix-artwork img {
+  transform: scale(1.05);
+}
+.mix-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 40%);
+}
+.mix-icon {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+}
+.mix-icon svg { width: 16px; height: 16px; stroke-width: 2; color: #fff; }
+.mix-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.mix-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Trending List (Minimalist) */
+.list-container {
+  padding: 0 24px;
+}
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.list-item:hover {
+  background: rgba(255,255,255,0.05);
+}
+.item-rank {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  width: 16px;
+  text-align: center;
+}
+.item-art {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+.item-info {
+  flex: 1;
+}
+.item-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.item-artist {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.item-action {
+  color: var(--text-secondary);
+}
+.item-action svg { width: 20px; height: 20px; stroke-width: 1.5; }
+
+/* 
+ * 5. FLOATING GLASS DOCK (Mobile Bottom)
+ */
+.nav-wrapper {
+  position: fixed;
+  bottom: 32px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none; 
+}
+.nav-dock {
+  pointer-events: auto; 
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 48px);
+  max-width: 342px;
+  background: rgba(30, 30, 30, 0.6);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  padding: 12px 24px;
+  border-radius: 100px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.nav-item {
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  transition: color 0.2s;
+  cursor: pointer;
+}
+.nav-item:hover, .nav-item.active {
+  color: var(--text-primary);
+}
+.nav-item svg { width: 22px; height: 22px; stroke-width: 1.5; }
+.nav-label { display: none; } /* Hidden on mobile dock */
+
+/* ========================================================
+   RESPONSIVE DESIGN (TABLET & DESKTOP)
+   ======================================================== */
+@media (min-width: 768px) {
+  
+  .app-container {
+    flex-direction: row; /* Sidebar + Content */
+  }
+
+  /* Transform Bottom Dock into Left Sidebar */
+  .nav-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: auto;
+    height: 100vh;
+    width: var(--sidebar-width);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    z-index: 100;
+    background: transparent;
+  }
+  
+  .nav-dock {
+    flex-direction: column;
+    width: 60px;
+    height: auto;
+    padding: 32px 12px;
+    gap: 32px;
+    border-radius: 100px; /* Still a pill, just vertical */
+  }
+
+  .nav-label {
+    display: none; /* Keep minimalist icons on tablet */
+  }
+
+  /* Content Wrapper adjustments */
+  .content-wrapper {
+    margin-left: var(--sidebar-width);
+    max-width: 900px; /* Wider content for desktop */
+    padding-top: 60px;
+    padding-bottom: 60px;
+  }
+
+  /* Layout tweaks for wider screens */
+  .header {
+    padding: 0 40px;
+  }
+  
+  .room-glass-card {
+    margin: 0 40px 40px;
+    flex-direction: row; /* Horizontal layout for hero */
+    align-items: center;
+    justify-content: space-between;
+    padding: 32px;
+  }
+
+  .room-content {
+    margin-bottom: 0;
+    margin-right: 24px;
+  }
+  
+  .room-artwork {
+    width: 120px;
+    height: 120px;
+    border-radius: 20px;
+  }
+  .room-title {
+    font-size: 28px;
+  }
+  .room-artist {
+    font-size: 16px;
+  }
+
+  .room-footer {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 16px;
+  }
+
+  .section-header {
+    padding: 0 40px;
+  }
+  
+  .scroll-track {
+    padding: 0 40px;
+  }
+  .list-container {
+    padding: 0 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 2 column list on desktop */
+    gap: 0 24px;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Expand Sidebar for large desktop */
+  :root {
+    --sidebar-width: 240px;
+  }
+
+  .nav-wrapper {
+    align-items: flex-start;
+    background: rgba(10, 10, 10, 0.4);
+    backdrop-filter: blur(40px);
+    border-right: 1px solid var(--glass-border);
+  }
+
+  .nav-dock {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    padding: 40px 24px;
+    gap: 16px;
+  }
+
+  .nav-item {
+    flex-direction: row;
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    gap: 16px;
+  }
+  .nav-item:hover {
+    background: rgba(255,255,255,0.05);
+  }
+
+  .nav-label {
+    display: block;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .content-wrapper {
+    max-width: 1200px;
+  }
+  
+  /* Make horizontal scrolls fit completely without scrolling if space permits */
+  .scroll-track {
+    flex-wrap: wrap; 
+  }
+  
+  .list-container {
+    grid-template-columns: 1fr 1fr 1fr; /* 3 column list */
+  }
+}
+
+</style>
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- Floating Glass Dock (Mobile Bottom / Tablet Vertical Pill / Desktop Full Sidebar) -->
+  <nav class="nav-wrapper">
+    <div class="nav-dock">
+      <a href="#" class="nav-item active">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <span class="nav-label">Home</span>
+      </a>
+      <a href="#" class="nav-item">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <span class="nav-label">Search</span>
+      </a>
+      <a href="#" class="nav-item">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+        <span class="nav-label">Rooms</span>
+      </a>
+      <a href="#" class="nav-item">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        <span class="nav-label">Library</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Ambient Blurred Background generated from current active room -->
+  <div class="ambient-hero"></div>
+
+  <div class="content-wrapper">
+    
+    <!-- Header -->
+    <header class="header">
+      <div class="greeting">Home</div>
+      <div class="header-actions">
+        <button class="icon-btn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </button>
+        <img class="avatar-profile" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="Profile">
+      </div>
+    </header>
+
+    <!-- Premium Glassmorphic Room Card -->
+    <div class="room-glass-card">
+      <div class="room-content">
+        <img class="room-artwork" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=300&q=80" alt="Album Art">
+        <div class="room-meta">
+          <div class="room-status">
+            <div class="live-dot"></div>
+            <div class="status-text">Synchronized Listening</div>
+          </div>
+          <div class="room-title">Midnight Drive</div>
+          <div class="room-artist">After Dark • Mr.Kitty</div>
+        </div>
+      </div>
+
+      <div class="room-footer">
+        <div class="social-proof">
+          <div class="avatar-stack">
+            <img src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=80&q=80" alt="User">
+            <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=80&q=80" alt="User">
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="User">
+          </div>
+          <div class="listener-text">+11 others</div>
+        </div>
+        <button class="drop-in-btn">Drop In</button>
+      </div>
+    </div>
+
+    <!-- Discover Section -->
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">Discover</h2>
+        <a href="#" class="section-link">See all</a>
+      </div>
+      <div class="scroll-track">
+        <div class="mix-card">
+          <div class="mix-artwork">
+            <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=300&q=80" alt="Mix">
+            <div class="mix-overlay"></div>
+            <div class="mix-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+            </div>
+          </div>
+          <div class="mix-title">Lo-Fi Focus</div>
+          <div class="mix-subtitle">8 rooms active</div>
+        </div>
+
+        <div class="mix-card">
+          <div class="mix-artwork">
+            <img src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=300&q=80" alt="Mix">
+            <div class="mix-overlay"></div>
+            <div class="mix-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+            </div>
+          </div>
+          <div class="mix-title">Late Night</div>
+          <div class="mix-subtitle">12 rooms active</div>
+        </div>
+
+        <div class="mix-card">
+          <div class="mix-artwork">
+            <img src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=300&q=80" alt="Mix">
+            <div class="mix-overlay"></div>
+            <div class="mix-icon">
+               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+            </div>
+          </div>
+          <div class="mix-title">Synthwave</div>
+          <div class="mix-subtitle">5 rooms active</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Popular Now Section -->
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">Popular Tracks</h2>
+      </div>
+      <div class="list-container">
+        <div class="list-item">
+          <div class="item-rank">1</div>
+          <img class="item-art" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=120&q=80" alt="Track">
+          <div class="item-info">
+            <div class="item-title">Heat Waves</div>
+            <div class="item-artist">Glass Animals</div>
+          </div>
+          <div class="item-action">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          </div>
+        </div>
+
+        <div class="list-item">
+          <div class="item-rank">2</div>
+          <img class="item-art" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=120&q=80" alt="Track">
+          <div class="item-info">
+            <div class="item-title">Blinding Lights</div>
+            <div class="item-artist">The Weeknd</div>
+          </div>
+          <div class="item-action">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          </div>
+        </div>
+
+        <div class="list-item">
+          <div class="item-rank">3</div>
+          <img class="item-art" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=120&q=80" alt="Track">
+          <div class="item-info">
+            <div class="item-title">After Dark</div>
+            <div class="item-artist">Mr.Kitty</div>
+          </div>
+          <div class="item-action">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div> <!-- End Content Wrapper -->
+</div> <!-- End App Container -->
+
+</body>
+</html>
