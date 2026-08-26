@@ -2,6 +2,7 @@ const Room = require('../models/Room');
 const RoomMember = require('../models/RoomMember');
 const RoomPlaybackState = require('../models/RoomPlaybackState');
 const RoomQueueItem = require('../models/RoomQueueItem');
+const Song = require('../models/Song');
 
 module.exports = function(io) {
     io.on('connection', (socket) => {
@@ -19,6 +20,7 @@ module.exports = function(io) {
             
             socket.join(roomId);
             socket.userId = userId;
+            socket.currentRoomId = roomId; // Track room for disconnect cleanup
 
             // Fetch authoritative state
             try {
@@ -44,7 +46,11 @@ module.exports = function(io) {
 
                 const playbackState = await RoomPlaybackState.findOne({ roomId }).populate('currentTrackId');
 
-                // Send immediate authoritative state
+                // Get real-time listener count from connected sockets
+                const roomSockets = io.sockets.adapter.rooms.get(roomId);
+                const listenerCount = roomSockets ? roomSockets.size : 1;
+
+                // Send immediate authoritative state with real listener count
                 socket.emit('room:state', {
                     metadata: room,
                     playbackState: {
@@ -55,11 +61,13 @@ module.exports = function(io) {
                         sequenceNumber: playbackState.sequenceNumber
                     },
                     role: member.role,
-                    serverTime: Date.now()
+                    serverTime: Date.now(),
+                    listenerCount
                 });
 
-                // Notify others
-                socket.to(roomId).emit('room:member-joined', { userId });
+                // Notify others with updated count
+                const newCount = listenerCount;
+                socket.to(roomId).emit('room:member-joined', { userId, listenerCount: newCount });
                 if (callback) callback({ success: true });
 
             } catch(e) {
@@ -166,17 +174,35 @@ module.exports = function(io) {
             }
         });
 
-        socket.on('room:change-track', async ({ roomId, currentSongId }, callback) => {
+        socket.on('room:change-track', async ({ roomId, song }, callback) => {
             try {
                 const member = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
                 if (!member) return callback && callback({ error: 'Permission denied' });
+
+                let trackId = null;
+                
+                if (song) {
+                    const dbSong = await Song.findOneAndUpdate(
+                        { songId: song.id || song.songId || song._id },
+                        { 
+                            title: song.title || song.name,
+                            subtitle: song.subtitle,
+                            artist: song.artist,
+                            image: song.image,
+                            source: song.source || 'saavn',
+                            youtubeId: song.youtubeId
+                        },
+                        { upsert: true, new: true }
+                    );
+                    trackId = dbSong._id;
+                }
 
                 const newState = await RoomPlaybackState.findOneAndUpdate(
                     { roomId },
                     { 
                         $set: { 
-                            currentTrackId: currentSongId,
-                            status: 'PLAYING',
+                            currentTrackId: trackId,
+                            status: song ? 'PLAYING' : 'PAUSED',
                             positionMs: 0, 
                             stateTimestamp: Date.now(), 
                             updatedBy: socket.userId 
@@ -196,6 +222,7 @@ module.exports = function(io) {
 
                 if (callback) callback({ success: true });
             } catch(e) {
+                console.error("Change track error:", e);
                 if (callback) callback({ error: 'Server error' });
             }
         });
@@ -203,6 +230,9 @@ module.exports = function(io) {
         // Chat
         socket.on('room:chat', async ({ roomId, message, username }, callback) => {
             try {
+                if (!message || typeof message !== 'string' || !message.trim()) {
+                    return callback && callback({ error: 'Invalid message' });
+                }
                 const member = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER', 'MEMBER']);
                 if (!member) return callback && callback({ error: 'Permission denied' });
 
@@ -237,8 +267,20 @@ module.exports = function(io) {
             io.to(roomId).emit('room:member-left', { userId: socket.userId });
         });
 
-        socket.on('disconnect', () => {
+        socket.on('disconnect', async () => {
             console.log('User disconnected:', socket.id);
+            // Proactively clean up if user closed tab without clicking Leave
+            if (socket.currentRoomId && socket.userId) {
+                const roomId = socket.currentRoomId;
+                // Brief delay so socket has fully left the room
+                setTimeout(async () => {
+                    try {
+                        const roomSockets = io.sockets.adapter.rooms.get(roomId);
+                        const listenerCount = roomSockets ? roomSockets.size : 0;
+                        io.to(roomId).emit('room:member-left', { userId: socket.userId, listenerCount });
+                    } catch(e) { /* ignore */ }
+                }, 200);
+            }
         });
     });
 };

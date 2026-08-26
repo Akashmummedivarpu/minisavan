@@ -93,10 +93,43 @@ router.post('/:id/remove', authMiddleware, async (req, res) => {
         if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
 
         playlist.tracks = playlist.tracks.filter(t => t.toString() !== songId);
+        
+        // Re-evaluate cover image if tracks are removed
+        if (playlist.tracks.length === 0) {
+            playlist.coverImage = '';
+        }
+        
         await playlist.save();
         res.json(playlist);
     } catch (e) {
         res.status(500).json({ error: 'Failed to remove song' });
+    }
+});
+
+// Update playlist
+router.put('/:id', authMiddleware, async (req, res) => {
+    const { name, description } = req.body;
+    try {
+        const playlist = await Playlist.findOneAndUpdate(
+            { _id: req.params.id, user: req.user._id },
+            { name, description },
+            { new: true }
+        ).populate('tracks');
+        if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+        res.json(playlist);
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to update playlist' });
+    }
+});
+
+// Delete playlist
+router.delete('/:id', authMiddleware, async (req, res) => {
+    try {
+        const playlist = await Playlist.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+        if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to delete playlist' });
     }
 });
 
