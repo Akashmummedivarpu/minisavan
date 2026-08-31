@@ -3,6 +3,8 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const Song = require('../models/Song');
 const MusicProvider = require('../services/MusicProvider');
+const logger = require('../utils/logger');
+const AppError = require('../utils/AppError');
 
 // Helper function to upsert a song
 async function getOrUpsertSong(songId) {
@@ -23,20 +25,20 @@ async function getOrUpsertSong(songId) {
     return song;
 }
 
-router.get('/history', authMiddleware, async (req, res) => {
+router.get('/history', authMiddleware, async (req, res, next) => {
     try {
         await req.user.populate('history');
         res.json(req.user.history);
     } catch (e) {
-        res.status(500).json({ error: 'Failed to fetch history' });
+        next(e);
     }
 });
 
-router.post('/history', authMiddleware, async (req, res) => {
+router.post('/history', authMiddleware, async (req, res, next) => {
     const { songId } = req.body;
     try {
         const song = await getOrUpsertSong(songId);
-        if (!song) return res.status(404).json({ error: 'Song not found' });
+        if (!song) return next(new AppError('Song not found', 404, 'NOT_FOUND'));
 
         // Remove from history if it exists to push to front
         const index = req.user.history.indexOf(song._id);
@@ -54,24 +56,24 @@ router.post('/history', authMiddleware, async (req, res) => {
         await req.user.save();
         res.json({ success: true });
     } catch (e) {
-        res.status(500).json({ error: 'Failed to update history' });
+        next(e);
     }
 });
 
-router.get('/liked', authMiddleware, async (req, res) => {
+router.get('/liked', authMiddleware, async (req, res, next) => {
     try {
         await req.user.populate('likedSongs');
         res.json(req.user.likedSongs);
     } catch (e) {
-        res.status(500).json({ error: 'Failed to fetch liked songs' });
+        next(e);
     }
 });
 
-router.post('/liked/toggle', authMiddleware, async (req, res) => {
+router.post('/liked/toggle', authMiddleware, async (req, res, next) => {
     const { songId } = req.body;
     try {
         const song = await getOrUpsertSong(songId);
-        if (!song) return res.status(404).json({ error: 'Song not found' });
+        if (!song) return next(new AppError('Song not found', 404, 'NOT_FOUND'));
 
         const index = req.user.likedSongs.indexOf(song._id);
         if (index > -1) {
@@ -83,20 +85,23 @@ router.post('/liked/toggle', authMiddleware, async (req, res) => {
         await req.user.save();
         res.json({ liked: index === -1 });
     } catch (e) {
-        res.status(500).json({ error: 'Failed to toggle liked status' });
+        next(e);
     }
 });
 
-router.put('/profile', authMiddleware, async (req, res) => {
+router.put('/profile', authMiddleware, async (req, res, next) => {
     try {
         const { username, avatar } = req.body;
         if (username) req.user.username = username;
         if (avatar) req.user.avatar = avatar;
         
         await req.user.save();
+        
+        logger.info({ userId: req.user._id, requestId: req.id }, 'USER_PROFILE_UPDATED');
+        
         res.json({ id: req.user._id, username: req.user.username, phoneNumber: req.user.phoneNumber, avatar: req.user.avatar });
     } catch (error) {
-        res.status(500).json({ error: 'Failed to update profile' });
+        next(error);
     }
 });
 

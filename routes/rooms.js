@@ -5,12 +5,14 @@ const RoomMember = require('../models/RoomMember');
 const RoomPlaybackState = require('../models/RoomPlaybackState');
 const authMiddleware = require('../middleware/authMiddleware');
 const crypto = require('crypto');
+const logger = require('../utils/logger');
+const AppError = require('../utils/AppError');
 
 // Helper to generate invite code
 const generateInviteCode = () => crypto.randomBytes(3).toString('hex').toUpperCase();
 
 // List public rooms
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
     try {
         const rooms = await Room.find({ status: 'ACTIVE', visibility: 'PUBLIC' })
             .populate('hostId', 'username');
@@ -35,15 +37,14 @@ router.get('/', async (req, res) => {
 
         res.json(enrichedRooms);
     } catch (e) {
-        console.error('Fetch rooms error:', e);
-        res.status(500).json({ error: 'Failed to fetch rooms' });
+        next(e);
     }
 });
 
 // Create a room
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, async (req, res, next) => {
     const { name, description, visibility, joinMode } = req.body;
-    if (!name) return res.status(400).json({ error: 'Room name required' });
+    if (!name) return next(new AppError('Room name required', 400, 'VALIDATION_ERROR'));
 
     try {
         const room = await Room.create({
@@ -71,10 +72,11 @@ router.post('/', authMiddleware, async (req, res) => {
             updatedBy: req.user._id
         });
 
+        logger.info({ roomId: room._id, userId: req.user._id, requestId: req.id }, 'ROOM_CREATED');
+
         res.status(201).json(room);
     } catch (e) {
-        console.error('Create room error:', e);
-        res.status(500).json({ error: 'Failed to create room' });
+        next(e);
     }
 });
 

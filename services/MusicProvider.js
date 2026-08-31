@@ -2,14 +2,15 @@ const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const ytSearch = require('yt-search');
 const playdl = require('play-dl');
+const logger = require('../utils/logger');
 
 // Initialize SoundCloud Client ID for play-dl
 playdl.getFreeClientID().then(client_id => {
     if (client_id) {
         playdl.setToken({ soundcloud: { client_id } });
-        console.log("SoundCloud Client ID initialized:", client_id);
+        logger.info({ client_id }, "SoundCloud Client ID initialized");
     }
-}).catch(e => console.error("Failed to init SoundCloud:", e));
+}).catch(e => logger.error({ err: e }, "Failed to init SoundCloud"));
 
 function decryptMediaUrl(encryptedUrl) {
     if (!encryptedUrl) return null;
@@ -23,7 +24,7 @@ function decryptMediaUrl(encryptedUrl) {
         let decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
         return decryptedStr.replace(/_96\.mp4|_160\.mp4/g, '_320.mp4').replace(/_96\.m4a|_160\.m4a/g, '_320.m4a');
     } catch (e) {
-        console.error("Decryption error:", e);
+        logger.error({ err: e }, "Decryption error");
         return null;
     }
 }
@@ -49,7 +50,7 @@ class MusicProvider {
             }
             return songs;
         } catch (error) {
-            console.log("JioSaavn search failed, falling back to Gaana...");
+            logger.warn("JioSaavn search failed, falling back to Gaana...");
             try {
                 // 2. Fallback to Gaana API
                 const headers = {
@@ -76,7 +77,7 @@ class MusicProvider {
                 }
                 throw new Error("No results from Gaana");
             } catch (gaanaError) {
-                console.log("Gaana search failed, falling back to SoundCloud...");
+                logger.warn("Gaana search failed, falling back to SoundCloud...");
                 try {
                     const scResults = await playdl.search(query, { source: { soundcloud: 'tracks' }, limit: 10 });
                     if (scResults && scResults.length > 0) {
@@ -92,7 +93,7 @@ class MusicProvider {
                     }
                     throw new Error("No results from SoundCloud");
                 } catch (scError) {
-                    console.log("SoundCloud search failed, falling back to YouTube...");
+                    logger.warn("SoundCloud search failed, falling back to YouTube...");
                     const ytResults = await ytSearch(query);
                     return ytResults.videos.slice(0, 10).map(video => ({
                         id: 'yt_' + video.videoId,
@@ -135,7 +136,7 @@ class MusicProvider {
             const stream = await playdl.stream(youtubeId);
             return stream.url;
         } catch (error) {
-            console.error("YouTube stream extraction failed", error);
+            logger.error({ err: error, youtubeId }, "YouTube stream extraction failed");
             return null;
         }
     }
@@ -145,7 +146,7 @@ class MusicProvider {
             const stream = await playdl.stream(scUrl);
             return stream.url;
         } catch (error) {
-            console.error("SoundCloud stream extraction failed", error);
+            logger.error({ err: error, scUrl }, "SoundCloud stream extraction failed");
             return null;
         }
     }
@@ -173,7 +174,7 @@ class MusicProvider {
             }
             throw new Error("No recommendations from JioSaavn");
         } catch (jioError) {
-            console.log("JioSaavn recommendations failed, falling back to Gaana...");
+            logger.warn("JioSaavn recommendations failed, falling back to Gaana...");
             
             try {
                 // 2. Fallback to Gaana
@@ -203,7 +204,7 @@ class MusicProvider {
                 }
                 throw new Error("No recommendations from Gaana");
             } catch (gaanaError) {
-                console.log("Gaana recommendations failed, falling back to YouTube...");
+                logger.warn("Gaana recommendations failed, falling back to YouTube...");
                 
                 try {
                     // 3. Fallback to YouTube
@@ -236,7 +237,7 @@ class MusicProvider {
                         youtubeId: video.videoId
                     }));
                 } catch (ytError) {
-                    console.error("All recommendation fallbacks failed:", ytError);
+                    logger.error({ err: ytError }, "All recommendation fallbacks failed");
                     return [];
                 }
             }

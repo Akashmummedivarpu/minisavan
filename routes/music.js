@@ -4,20 +4,22 @@ const MusicProvider = require('../services/MusicProvider');
 const Song = require('../models/Song');
 const authMiddleware = require('../middleware/authMiddleware');
 const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware');
+const logger = require('../utils/logger');
+const AppError = require('../utils/AppError');
 
-router.get('/search', async (req, res) => {
+router.get('/search', async (req, res, next) => {
     const query = req.query.query;
-    if (!query) return res.status(400).json({ error: 'Query parameter is required' });
+    if (!query) return next(new AppError('Query parameter is required', 400, 'VALIDATION_ERROR'));
     
     try {
         const results = await MusicProvider.search(query);
         res.json(results);
     } catch (error) {
-        res.status(500).json({ error: 'Search failed' });
+        next(error);
     }
 });
 
-router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
+router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
     const id = req.params.id;
     const { title, artist, image } = req.query;
 
@@ -67,7 +69,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
 
         if (id.startsWith('gn_')) {
             const gaanaId = id.replace('gn_', '');
-            console.log(`Gaana fallback requested for ${gaanaId}, mapping to YouTube stream...`);
+            logger.warn({ gaanaId, requestId: req.id }, `Gaana fallback requested, mapping to YouTube stream...`);
             const song = await Song.findOne({ 'songId': id });
             if (song) {
                 if (req.user) {
@@ -93,7 +95,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
                     }
                 }
             }
-            return res.status(404).json({ error: 'Gaana/YouTube stream extraction failed' });
+            return next(new AppError('Gaana/YouTube stream extraction failed', 404, 'NOT_FOUND'));
         }
 
         if (id.startsWith('sc_')) {
@@ -174,23 +176,22 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
 
             res.json(songData);
         } else {
-            res.status(404).json({ error: 'Song not found' });
+            return next(new AppError('Song not found', 404, 'NOT_FOUND'));
         }
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to fetch song details' });
+        next(error);
     }
 });
 
-router.get('/recommendations', async (req, res) => {
+router.get('/recommendations', async (req, res, next) => {
     const { artist, title } = req.query;
-    if (!artist && !title) return res.status(400).json({ error: 'Artist or title required' });
+    if (!artist && !title) return next(new AppError('Artist or title required', 400, 'VALIDATION_ERROR'));
     
     try {
         const recommendations = await MusicProvider.getRecommendations(artist, title);
         res.json(recommendations);
     } catch (error) {
-        res.status(500).json({ error: 'Recommendations failed' });
+        next(error);
     }
 });
 

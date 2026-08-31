@@ -13,6 +13,9 @@ const playlistRoutes = require('./routes/playlists');
 const roomRoutes = require('./routes/rooms');
 
 const authMiddleware = require('./middleware/authMiddleware');
+const logger = require('./utils/logger');
+const requestLogger = require('./middleware/requestLogger');
+const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 const server = http.createServer(app);
@@ -25,11 +28,12 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json());
+app.use(requestLogger);
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB Atlas'))
-    .catch(err => console.error('MongoDB connection error:', err));
+    .then(() => logger.info('Connected to MongoDB Atlas'))
+    .catch(err => logger.error({ err }, 'MongoDB connection error'));
 
 // Optional Auth Middleware for Music Routes (to track history)
 const optionalAuth = async (req, res, next) => {
@@ -43,7 +47,10 @@ const optionalAuth = async (req, res, next) => {
             const user = await User.findById(decoded.id).select('-password');
             if (user) req.user = user;
         }
-    } catch (err) {}
+    } catch (err) {
+        // Optional auth fails silently, but we can log at debug level
+        logger.debug({ err, requestId: req.id }, 'Optional auth failed');
+    }
     next();
 };
 
@@ -57,7 +64,10 @@ app.use('/api/rooms', roomRoutes);
 // Socket.io integration
 require('./routes/socket')(io);
 
+// Centralized error handler should be the last middleware
+app.use(errorHandler);
+
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT}`);
 });

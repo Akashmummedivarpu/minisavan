@@ -3,10 +3,11 @@ const RoomMember = require('../models/RoomMember');
 const RoomPlaybackState = require('../models/RoomPlaybackState');
 const RoomQueueItem = require('../models/RoomQueueItem');
 const Song = require('../models/Song');
+const logger = require('../utils/logger');
 
 module.exports = function(io) {
     io.on('connection', (socket) => {
-        console.log('User connected:', socket.id);
+        logger.info({ socketId: socket.id }, 'User connected');
 
         // Helper to validate permission
         const checkPermission = async (userId, roomId, allowedRoles) => {
@@ -71,7 +72,7 @@ module.exports = function(io) {
                 if (callback) callback({ success: true });
 
             } catch(e) {
-                console.error("Room sync error", e);
+                logger.error({ err: e, roomId, userId }, "Room sync error");
                 if (callback) callback({ error: 'Server error' });
             }
         });
@@ -222,7 +223,7 @@ module.exports = function(io) {
 
                 if (callback) callback({ success: true });
             } catch(e) {
-                console.error("Change track error:", e);
+                logger.error({ err: e, roomId, userId: socket.userId }, "Change track error");
                 if (callback) callback({ error: 'Server error' });
             }
         });
@@ -268,7 +269,7 @@ module.exports = function(io) {
         });
 
         socket.on('disconnect', async () => {
-            console.log('User disconnected:', socket.id);
+            logger.info({ socketId: socket.id, userId: socket.userId }, 'User disconnected');
             // Proactively clean up if user closed tab without clicking Leave
             if (socket.currentRoomId && socket.userId) {
                 const roomId = socket.currentRoomId;
