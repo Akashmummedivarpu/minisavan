@@ -45,13 +45,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
                 await cachedSong.save();
             }
 
-            // Update user history if authenticated
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== cachedSong._id.toString());
-                req.user.history.unshift(cachedSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             const streamUrl = await MusicProvider.getYoutubeStream(cachedSong.youtubeId);
 
@@ -72,12 +66,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
             logger.warn({ gaanaId, requestId: req.id }, `Gaana fallback requested, mapping to YouTube stream...`);
             const song = await Song.findOne({ 'songId': id });
             if (song) {
-                if (req.user) {
-                    req.user.history = req.user.history.filter(s => s.toString() !== song._id.toString());
-                    req.user.history.unshift(song._id);
-                    if (req.user.history.length > 50) req.user.history.pop();
-                    await req.user.save();
-                }
+
 
                 const ytResults = await ytSearch(`${song.title} ${song.artist}`);
                 if (ytResults && ytResults.videos.length > 0) {
@@ -117,12 +106,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
                 await cachedSong.save();
             }
 
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== cachedSong._id.toString());
-                req.user.history.unshift(cachedSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             // For SoundCloud, we passed the URL directly into scId during search mapping
             const streamUrl = await MusicProvider.getSoundCloudStream(cachedSong.scId);
@@ -143,12 +127,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
             cachedSong.playedAt = Date.now();
             await cachedSong.save();
             
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== cachedSong._id.toString());
-                req.user.history.unshift(cachedSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             const details = await MusicProvider.getSongDetails(id);
             if (details) {
@@ -167,12 +146,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
                 source: 'saavn'
             });
 
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== newSong._id.toString());
-                req.user.history.unshift(newSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             res.json(songData);
         } else {
