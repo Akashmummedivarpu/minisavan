@@ -14,7 +14,7 @@ const roomPlaybackStateSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['PLAYING', 'PAUSED'],
+    enum: ['PLAYING', 'PAUSED', 'IDLE'],
     default: 'PAUSED'
   },
   positionMs: {

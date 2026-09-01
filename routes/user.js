@@ -6,21 +6,31 @@ const MusicProvider = require('../services/MusicProvider');
 const logger = require('../utils/logger');
 const AppError = require('../utils/AppError');
 
-// Helper function to upsert a song
+// Helper function to upsert a song (race-safe: handles concurrent duplicate creates)
 async function getOrUpsertSong(songId) {
     let song = await Song.findOne({ songId });
     if (!song) {
         const songData = await MusicProvider.getSongDetails(songId);
         if (!songData) return null;
-        
-        song = await Song.create({
-            songId: songData.id,
-            title: songData.title,
-            subtitle: songData.subtitle,
-            image: songData.image,
-            artist: songData.artist,
-            source: 'saavn'
-        });
+
+        try {
+            song = await Song.create({
+                songId: songData.id,
+                title: songData.title,
+                subtitle: songData.subtitle,
+                image: songData.image,
+                artist: songData.artist,
+                source: 'saavn'
+            });
+        } catch (e) {
+            // Handle E11000 duplicate key race (concurrent create for the same song)
+            if (e && e.code === 11000) {
+                song = await Song.findOne({ songId: songData.id });
+                if (!song) throw e;
+            } else {
+                throw e;
+            }
+        }
     }
     return song;
 }

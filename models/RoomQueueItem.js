@@ -19,11 +19,17 @@ const roomQueueItemSchema = new mongoose.Schema({
   position: {
     type: Number,
     required: true
+  },
+  status: {
+    type: String,
+    enum: ['QUEUED', 'PLAYING', 'PLAYED', 'REMOVED'],
+    default: 'QUEUED'
   }
 }, { timestamps: true });
 
 // Indexes
 roomQueueItemSchema.index({ roomId: 1, position: 1 });
 roomQueueItemSchema.index({ roomId: 1, createdAt: 1 });
+roomQueueItemSchema.index({ roomId: 1, status: 1 });
 
 module.exports = mongoose.model('RoomQueueItem', roomQueueItemSchema);

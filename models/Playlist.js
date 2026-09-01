@@ -6,6 +6,10 @@ const playlistSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  description: {
+    type: String,
+    default: ''
+  },
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -15,6 +19,10 @@ const playlistSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Song'
   }],
+  trackCount: {
+    type: Number,
+    default: 0
+  },
   coverImage: {
     type: String,
     default: null

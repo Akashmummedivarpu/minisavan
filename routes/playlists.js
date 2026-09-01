@@ -74,6 +74,7 @@ router.post('/:id/add', authMiddleware, async (req, res, next) => {
 
         if (!playlist.tracks.includes(internalMongoId)) {
             playlist.tracks.push(internalMongoId);
+            playlist.trackCount = playlist.tracks.length;
             
             // If it's the first track, set the cover image
             if (playlist.tracks.length === 1 && song.image) {
@@ -94,8 +95,20 @@ router.post('/:id/remove', authMiddleware, async (req, res, next) => {
         const playlist = await Playlist.findOne({ _id: req.params.id, user: req.user._id });
         if (!playlist) return next(new AppError('Playlist not found', 404, 'NOT_FOUND'));
 
-        playlist.tracks = playlist.tracks.filter(t => t.toString() !== songId);
+        // Convert external songId to internal Mongo _id before filtering.
+        // The client may pass either the external platform songId OR the internal
+        // Mongo ObjectId (populated track._id), so handle both.
+        const song = await Song.findOne({ $or: [{ songId }, { _id: songId }] });
+        if (song) {
+            playlist.tracks = playlist.tracks.filter(t => t.toString() !== song._id.toString());
+        } else {
+            // Fallback: if songId is already the internal Mongo id representation,
+            // remove it directly from the tracks array.
+            playlist.tracks = playlist.tracks.filter(t => t.toString() !== songId.toString());
+        }
         
+        playlist.trackCount = playlist.tracks.length;
+
         // Re-evaluate cover image if tracks are removed
         if (playlist.tracks.length === 0) {
             playlist.coverImage = '';

@@ -17,23 +17,10 @@ router.get('/', async (req, res, next) => {
         const rooms = await Room.find({ status: 'ACTIVE', visibility: 'PUBLIC' })
             .populate('hostId', 'username');
         
-        // Also get playback state for these rooms
-        const roomIds = rooms.map(r => r._id);
-        const states = await RoomPlaybackState.find({ roomId: { $in: roomIds } }).populate('currentTrackId');
-        const members = await RoomMember.aggregate([
-            { $match: { roomId: { $in: roomIds }, status: 'ACTIVE' } },
-            { $group: { _id: '$roomId', count: { $sum: 1 } } }
-        ]);
-
-        const enrichedRooms = rooms.map(room => {
-            const state = states.find(s => s.roomId.toString() === room._id.toString());
-            const memberCount = members.find(m => m._id.toString() === room._id.toString())?.count || 0;
-            return {
-                ...room.toObject(),
-                currentSong: state?.currentTrackId || null,
-                memberCount
-            };
-        });
+        const enrichedRooms = rooms.map(room => ({
+            ...room.toObject(),
+            memberCount: room.listenerCount || 0
+        }));
 
         res.json(enrichedRooms);
     } catch (e) {

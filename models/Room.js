@@ -39,11 +39,29 @@ const roomSchema = new mongoose.Schema({
   coverImage: {
     type: String,
     default: ''
+  },
+  listenerCount: {
+    type: Number,
+    default: 0
+  },
+  currentTrackId: {
+    type: String,
+    default: null
+  },
+  currentTrackName: {
+    type: String,
+    default: null
+  },
+  endedAt: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
 
 // Indexes
 roomSchema.index({ visibility: 1, status: 1 });
 roomSchema.index({ hostId: 1 });
+roomSchema.index({ hostId: 1, status: 1 });
+roomSchema.index({ status: 1, listenerCount: -1 });
 
 module.exports = mongoose.model('Room', roomSchema);

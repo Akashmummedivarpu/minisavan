@@ -6,6 +6,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware');
 const logger = require('../utils/logger');
 const AppError = require('../utils/AppError');
+const ytSearch = require('yt-search');
 
 router.get('/search', async (req, res, next) => {
     const query = req.query.query;
@@ -137,16 +138,24 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
 
         const songData = await MusicProvider.getSongDetails(id);
         if (songData) {
-            const newSong = await Song.create({
-                songId: songData.id,
-                title: songData.title,
-                subtitle: songData.subtitle,
-                image: songData.image,
-                artist: songData.artist,
-                source: 'saavn'
-            });
-
-
+            let newSong;
+            try {
+                newSong = await Song.create({
+                    songId: songData.id,
+                    title: songData.title,
+                    subtitle: songData.subtitle,
+                    image: songData.image,
+                    artist: songData.artist,
+                    source: 'saavn'
+                });
+            } catch (error) {
+                // Handle E11000 duplicate key race (concurrent create for the same song)
+                if (error && error.code === 11000) {
+                    newSong = await Song.findOne({ songId: songData.id });
+                } else {
+                    throw error;
+                }
+            }
 
             res.json(songData);
         } else {
