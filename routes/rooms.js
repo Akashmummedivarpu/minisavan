@@ -16,11 +16,26 @@ router.get('/', async (req, res, next) => {
     try {
         const rooms = await Room.find({ status: 'ACTIVE', visibility: 'PUBLIC' })
             .populate('hostId', 'username');
-        
-        const enrichedRooms = rooms.map(room => ({
-            ...room.toObject(),
-            memberCount: room.listenerCount || 0
-        }));
+
+        const roomIds = rooms.map(room => room._id);
+
+        // Fetch playback states so the client can tell which rooms are actually
+        // playing a song right now (used by Home to show "Active Rooms").
+        const playbackStates = roomIds.length > 0
+            ? await RoomPlaybackState.find({ roomId: { $in: roomIds } }).select('roomId status currentTrackId positionMs').lean()
+            : [];
+        const playbackMap = new Map(playbackStates.map(s => [s.roomId.toString(), s]));
+
+        const enrichedRooms = rooms.map(room => {
+            const pb = playbackMap.get(room._id.toString());
+            const isPlaying = !!(pb && pb.status === 'PLAYING' && pb.currentTrackId);
+            return {
+                ...room.toObject(),
+                memberCount: room.listenerCount || 0,
+                isPlaying,
+                isPaused: !!(pb && pb.status === 'PAUSED' && pb.currentTrackId)
+            };
+        });
 
         res.json(enrichedRooms);
     } catch (e) {
@@ -30,13 +45,14 @@ router.get('/', async (req, res, next) => {
 
 // Create a room
 router.post('/', authMiddleware, async (req, res, next) => {
-    const { name, description, visibility, joinMode } = req.body;
+    const { name, description, visibility, joinMode, coverImage } = req.body;
     if (!name) return next(new AppError('Room name required', 400, 'VALIDATION_ERROR'));
 
     try {
         const room = await Room.create({
             name,
             description: description || '',
+            coverImage: coverImage || '',
             hostId: req.user._id,
             visibility: visibility || 'PUBLIC',
             joinMode: joinMode || 'OPEN_JOIN',

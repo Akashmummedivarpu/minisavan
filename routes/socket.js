@@ -360,6 +360,37 @@ module.exports = function(io) {
             }
         });
 
+        // Reset a room's queue and playback so a restart starts fresh
+        const resetRoomPlayback = async (roomId) => {
+            try {
+                await RoomQueueItem.deleteMany({ roomId, status: 'QUEUED' });
+                await RoomPlaybackState.findOneAndUpdate(
+                    { roomId },
+                    {
+                        $set: {
+                            currentTrackId: null,
+                            status: 'IDLE',
+                            positionMs: 0,
+                            stateTimestamp: Date.now()
+                        },
+                        $inc: { sequenceNumber: 1 }
+                    },
+                    { new: true }
+                );
+                await Room.findByIdAndUpdate(roomId, {
+                    currentTrackId: null,
+                    currentTrackName: null
+                });
+                io.to(roomId).emit('room:queue-cleared', {
+                    message: 'Host left — queue cleared',
+                    state: { currentSong: null, status: 'IDLE', positionMs: 0, sequenceNumber: -1 }
+                });
+                logger.info({ roomId }, 'Room queue cleared on host leave');
+            } catch (e) {
+                logger.error({ err: e, roomId }, 'Failed to reset room playback');
+            }
+        };
+
         socket.on('room:leave', async ({ roomId }) => {
             socket.leave(roomId);
             const listenerCount = await updateRoomListenerCount(roomId);
@@ -371,6 +402,17 @@ module.exports = function(io) {
                     { userId: socket.userId, roomId, status: 'ACTIVE' },
                     { status: 'LEFT', leftAt: new Date() }
                 );
+            }
+
+            // When the host leaves, wipe the queue + playback so a fresh
+            // broadcast starts empty instead of replaying old songs.
+            try {
+                const room = await Room.findById(roomId);
+                if (room && socket.userId && room.hostId.toString() === socket.userId.toString()) {
+                    await resetRoomPlayback(roomId);
+                }
+            } catch (e) {
+                logger.error({ err: e, roomId, userId: socket.userId }, 'Host leave cleanup error');
             }
         });
 
@@ -442,6 +484,20 @@ module.exports = function(io) {
                                 room.status = 'ENDED';
                                 room.endedAt = new Date();
                                 await room.save();
+                                // Wipe queue + playback state for a clean slate
+                                try {
+                                    await RoomQueueItem.deleteMany({ roomId, status: 'QUEUED' });
+                                    await RoomPlaybackState.findOneAndUpdate(
+                                        { roomId },
+                                        {
+                                            $set: { currentTrackId: null, status: 'IDLE', positionMs: 0, stateTimestamp: Date.now() },
+                                            $inc: { sequenceNumber: 1 }
+                                        },
+                                        { new: true }
+                                    );
+                                } catch (e) {
+                                    logger.error({ err: e, roomId }, 'Room ended cleanup error');
+                                }
                                 io.to(roomId).emit('room:ended', { message: 'Room ended — host left with no eligible successor.' });
                                 logger.info({ roomId }, 'Room ended — no eligible admin successor');
                             }
