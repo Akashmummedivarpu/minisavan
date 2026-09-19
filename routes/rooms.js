@@ -44,6 +44,18 @@ router.get('/', async (req, res, next) => {
 });
 
 // Create a room
+// Resolve an invite code to a room (join-by-code flow)
+router.get('/join/:inviteCode', authMiddleware, async (req, res, next) => {
+    try {
+        const code = (req.params.inviteCode || '').toUpperCase().trim();
+        const room = await Room.findOne({ inviteCode: code, status: 'ACTIVE' }).select('_id name visibility');
+        if (!room) return next(new AppError('Invalid or expired invite code', 404, 'NOT_FOUND'));
+        res.json({ roomId: room._id, name: room.name, visibility: room.visibility });
+    } catch (e) {
+        next(e);
+    }
+});
+
 router.post('/', authMiddleware, async (req, res, next) => {
     const { name, description, visibility, joinMode, coverImage } = req.body;
     if (!name) return next(new AppError('Room name required', 400, 'VALIDATION_ERROR'));

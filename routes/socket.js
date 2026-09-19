@@ -2,6 +2,7 @@ const Room = require('../models/Room');
 const RoomMember = require('../models/RoomMember');
 const RoomPlaybackState = require('../models/RoomPlaybackState');
 const RoomQueueItem = require('../models/RoomQueueItem');
+const RoomMessage = require('../models/RoomMessage');
 const Song = require('../models/Song');
 const User = require('../models/User');
 const logger = require('../utils/logger');
@@ -33,7 +34,7 @@ module.exports = function(io) {
             }
         };
 
-        socket.on('room:join', async ({ roomId, userId }, callback) => {
+        socket.on('room:join', async ({ roomId, userId, inviteCode }, callback) => {
             if (!roomId || !userId) return callback && callback({ error: 'Missing params' });
             
             socket.join(roomId);
@@ -51,8 +52,51 @@ module.exports = function(io) {
                 const room = await Room.findById(roomId);
                 if (!room) return callback && callback({ error: 'Room not found' });
 
+                // Reject joins to rooms that are over
+                if (room.status === 'ENDED') return callback && callback({ error: 'Room has ended' });
+
+                // Reject unknown users so bogus userIds can't create ghost memberships
+                const joinUser = await User.findById(userId).select('username');
+                if (!joinUser) return callback && callback({ error: 'User not found' });
+
                 let member = await RoomMember.findOne({ userId, roomId });
+
+                // PRIVATE rooms are members-only: strangers (no membership record,
+                // or explicitly removed) cannot auto-join. Existing members may rejoin.
+                // A valid invite code counts as an invitation and bypasses this check.
+                const codeOk = inviteCode && room.inviteCode &&
+                    inviteCode.toString().toUpperCase().trim() === room.inviteCode;
+                if (room.visibility === 'PRIVATE' && (!member || member.status === 'REMOVED') && !codeOk) {
+                    return callback && callback({ error: 'This room is private' });
+                }
                 
+                // Approval-required rooms: non-active users file a join request
+                // instead of auto-joining. Removed users stay out.
+                if (room.joinMode === 'APPROVAL_REQUIRED' && (!member || member.status !== 'ACTIVE')) {
+                    if (member && member.status === 'REMOVED') {
+                        return callback && callback({ error: 'You were removed from this room' });
+                    }
+                    if (!member) {
+                        member = await RoomMember.create({
+                            roomId,
+                            userId,
+                            role: 'MEMBER',
+                            status: 'PENDING'
+                        });
+                    } else if (member.status !== 'PENDING') {
+                        member.status = 'PENDING';
+                        await member.save();
+                    }
+                    const requester = joinUser;
+                    io.to(roomId).emit('room:join-requested', {
+                        roomId,
+                        userId,
+                        username: requester ? requester.username : 'Someone'
+                    });
+                    logger.info({ roomId, userId }, 'Join request created');
+                    return callback && callback({ requested: true });
+                }
+
                 // Auto-join if OPEN_JOIN and not already a member
                 if (!member && room.joinMode === 'OPEN_JOIN') {
                     member = await RoomMember.create({
@@ -86,6 +130,30 @@ module.exports = function(io) {
                     .populate('addedBy', 'username')
                     .lean();
 
+                // Recent chat history (latest 50, ascending for display)
+                const chatHistory = await RoomMessage.find({ roomId })
+                    .sort({ createdAt: -1 })
+                    .limit(50)
+                    .select('userId username avatar message createdAt')
+                    .lean();
+
+                // Pending join requests (visible to admins/controllers only).
+                // Entries whose user no longer resolves are skipped.
+                let pendingRequests = [];
+                if (member.role === 'ADMIN' || member.role === 'CONTROLLER') {
+                    const pending = await RoomMember.find({ roomId, status: 'PENDING' })
+                        .populate('userId', 'username')
+                        .select('userId joinedAt')
+                        .lean();
+                    pendingRequests = pending
+                        .filter(p => p.userId && (p.userId._id || p.userId))
+                        .map(p => ({
+                            userId: p.userId?._id || p.userId,
+                            username: p.userId?.username || 'Someone',
+                            requestedAt: p.joinedAt
+                        }));
+                }
+
                 // Send immediate authoritative state
                 socket.emit('room:state', {
                     metadata: room,
@@ -100,6 +168,14 @@ module.exports = function(io) {
                     serverTime: Date.now(),
                     listenerCount,
                     members,
+                    pendingRequests,
+                    chatHistory: chatHistory.reverse().map(m => ({
+                        userId: m.userId,
+                        username: m.username,
+                        avatar: m.avatar || null,
+                        message: m.message,
+                        createdAt: m.createdAt ? new Date(m.createdAt).getTime() : Date.now()
+                    })),
                     queue: queue.map(q => ({
                         _id: q._id,
                         track: q.trackId,
@@ -329,6 +405,32 @@ module.exports = function(io) {
                     message: message.trim(),
                     createdAt: Date.now()
                 });
+
+                // Persist for join-history backfill (fire-and-forget, capped at 100/room)
+                RoomMessage.create({
+                    roomId,
+                    userId: socket.userId,
+                    username,
+                    avatar: user?.avatar || null,
+                    message: message.trim()
+                }).then(async (doc) => {
+                    try {
+                        const count = await RoomMessage.countDocuments({ roomId });
+                        if (count > 100) {
+                            const cutoff = await RoomMessage.find({ roomId })
+                                .sort({ createdAt: -1 })
+                                .skip(100)
+                                .select('_id')
+                                .lean();
+                            await RoomMessage.deleteMany({ _id: { $in: cutoff.map(c => c._id) } });
+                        }
+                    } catch (trimErr) {
+                        logger.error({ err: trimErr, roomId }, 'Chat trim error');
+                    }
+                    return doc;
+                }).catch((saveErr) => {
+                    logger.error({ err: saveErr, roomId }, 'Chat persist error');
+                });
                 if (callback) callback({ success: true });
             } catch(e) {
                 logger.error({ err: e, roomId, userId: socket.userId }, "Chat error");
@@ -357,6 +459,38 @@ module.exports = function(io) {
                 if (callback) callback({ success: true });
             } catch(e) {
                 logger.error({ err: e, roomId, userId: socket.userId }, "Reaction error");
+            }
+        });
+
+        // Approve / deny join requests (ADMIN/CONTROLLER only)
+        socket.on('room:approve-request', async ({ roomId, userId }, callback) => {
+            try {
+                const admin = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
+                if (!admin) return callback && callback({ error: 'Permission denied' });
+                const member = await RoomMember.findOne({ userId, roomId, status: 'PENDING' });
+                if (!member) return callback && callback({ error: 'No pending request' });
+                member.status = 'ACTIVE';
+                await member.save();
+                const listenerCount = await updateRoomListenerCount(roomId);
+                io.to(roomId).emit('room:request-decided', { roomId, userId, approved: true, listenerCount });
+                if (callback) callback({ success: true });
+            } catch (e) {
+                logger.error({ err: e, roomId, userId }, 'Approve request error');
+                if (callback) callback({ error: 'Server error' });
+            }
+        });
+
+        socket.on('room:deny-request', async ({ roomId, userId }, callback) => {
+            try {
+                const admin = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
+                if (!admin) return callback && callback({ error: 'Permission denied' });
+                const member = await RoomMember.findOneAndDelete({ userId, roomId, status: 'PENDING' });
+                if (!member) return callback && callback({ error: 'No pending request' });
+                io.to(roomId).emit('room:request-decided', { roomId, userId, approved: false });
+                if (callback) callback({ success: true });
+            } catch (e) {
+                logger.error({ err: e, roomId, userId }, 'Deny request error');
+                if (callback) callback({ error: 'Server error' });
             }
         });
 

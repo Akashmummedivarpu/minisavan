@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Playlist = require('../models/Playlist');
 const Song = require('../models/Song');
@@ -97,8 +98,14 @@ router.post('/:id/remove', authMiddleware, async (req, res, next) => {
 
         // Convert external songId to internal Mongo _id before filtering.
         // The client may pass either the external platform songId OR the internal
-        // Mongo ObjectId (populated track._id), so handle both.
-        const song = await Song.findOne({ $or: [{ songId }, { _id: songId }] });
+        // Mongo ObjectId (populated track._id), so handle both. Only include the
+        // _id clause when the input is a valid ObjectId, otherwise Mongoose
+        // throws a CastError and removal by platform songId always 400s.
+        const orClauses = [{ songId }];
+        if (mongoose.Types.ObjectId.isValid(songId)) {
+            orClauses.push({ _id: songId });
+        }
+        const song = await Song.findOne({ $or: orClauses });
         if (song) {
             playlist.tracks = playlist.tracks.filter(t => t.toString() !== song._id.toString());
         } else {
