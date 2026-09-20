@@ -8,6 +8,7 @@ interface AudioContextType extends AudioState {
   togglePlay: () => void;
   seek: (time: number) => void;
   setVolume: (volume: number) => void;
+  setPlaybackRate: (rate: number) => void;
   playNext: () => void;
   playPrevious: () => void;
 }
@@ -20,12 +21,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     currentTime: 0,
     duration: 0,
     volume: 1,
+    playbackRate: 1,
     isLoading: false,
     hasError: false
   });
 
   // Connect to Zustand store for queue/playlist management
-  const { queue, currentIndex, playNext, playPrevious, playSong } = useRoomStore();
+  const { playNext, playPrevious } = useRoomStore();
 
   useEffect(() => {
     const handleTrackEnd = () => {
@@ -45,11 +47,18 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     audioManager.setMediaSessionActionHandlers({
       onPlay: () => {
-        // If we want to sync room state, we should trigger room store actions here
-        // but for now, AudioManager handles the local audio element directly.
+        // Sync room store state with media session playback
+        const { togglePlay, roomId, roomRole, isPlaying } = useRoomStore.getState();
+        if (!roomId || roomRole !== 'MEMBER') {
+          if (!isPlaying) togglePlay();
+        }
       },
       onPause: () => {
-        // same here
+        // Sync room store state with media session pause
+        const { togglePlay, roomId, roomRole, isPlaying } = useRoomStore.getState();
+        if (!roomId || roomRole !== 'MEMBER') {
+          if (isPlaying) togglePlay();
+        }
       },
       onNext: playNext,
       onPrevious: playPrevious,
@@ -61,6 +70,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const togglePlay = useCallback(() => audioManager.togglePlay(), []);
   const seek = useCallback((time: number) => audioManager.seek(time), []);
   const setVolume = useCallback((vol: number) => audioManager.setVolume(vol), []);
+  const setPlaybackRate = useCallback((rate: number) => audioManager.setPlaybackRate(rate), []);
 
   const value: AudioContextType = {
     ...audioState,
@@ -69,6 +79,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     togglePlay,
     seek,
     setVolume,
+    setPlaybackRate,
     playNext,
     playPrevious,
   };

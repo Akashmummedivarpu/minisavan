@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, Edit2, Camera } from 'lucide-react';
+import { User, LogOut, Edit2, Upload } from 'lucide-react';
 import { useRoomStore } from '../store';
 import AuthModal from './AuthModal';
 import { authenticatedFetch } from '../api';
+import toast from 'react-hot-toast';
+import { logger } from '../core/logger';
 
 export default function UserProfileDropdown() {
   const { user, token, setAuth, logout } = useRoomStore();
@@ -15,6 +17,7 @@ export default function UserProfileDropdown() {
   const [editUsername, setEditUsername] = useState(user?.username || '');
   const [editAvatar, setEditAvatar] = useState(user?.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setEditUsername(user?.username || '');
@@ -59,12 +62,37 @@ export default function UserProfileDropdown() {
       setAuth(data, token);
       setShowEditModal(false);
       setShowDropdown(false);
+      toast.success('Profile updated!');
     } catch (error) {
-      console.error("Failed to update profile", error);
-      alert("Failed to update profile. Please try again.");
+      logger.error("Failed to update profile", error);
+      toast.error('Failed to update profile. Please try again.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file size (max 500KB for base64 storage)
+    if (file.size > 500 * 1024) {
+      toast.error('Image too large. Please use an image under 500KB.');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setEditAvatar(result);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -120,16 +148,27 @@ export default function UserProfileDropdown() {
             <form onSubmit={handleEditSubmit} className="space-y-5">
               
               <div className="flex flex-col items-center mb-6">
-                <div className="w-24 h-24 rounded-full border-4 border-glassBorder bg-glass flex items-center justify-center overflow-hidden relative group">
+                <div 
+                  className="w-24 h-24 rounded-full border-4 border-glassBorder bg-glass flex items-center justify-center overflow-hidden relative group cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   {editAvatar ? (
                      <img src={editAvatar} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
                      <User size={40} className="text-secondary" />
                   )}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <Camera size={24} className="text-white" />
+                    <Upload size={24} className="text-white" />
                   </div>
                 </div>
+                <input 
+                  ref={fileInputRef}
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <p className="text-xs text-secondary mt-2">Tap to upload photo</p>
               </div>
 
               <div>
@@ -147,10 +186,10 @@ export default function UserProfileDropdown() {
               <div>
                 <label className="block text-sm font-medium text-secondary mb-2">Avatar URL (Optional)</label>
                 <input 
-                  type="url" 
-                  value={editAvatar}
+                  type="text" 
+                  value={editAvatar?.startsWith('data:') ? '' : editAvatar}
                   onChange={(e) => setEditAvatar(e.target.value)}
-                  placeholder="https://example.com/avatar.jpg"
+                  placeholder="Or paste a URL: https://example.com/avatar.jpg"
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
                 />
               </div>

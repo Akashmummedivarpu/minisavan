@@ -18,16 +18,16 @@ const roomMemberSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['ACTIVE', 'PENDING', 'REMOVED'],
+    enum: ['ACTIVE', 'PENDING', 'REMOVED', 'LEFT'],
     default: 'ACTIVE'
   },
   joinedAt: {
     type: Date,
     default: Date.now
   },
-  lastSeenAt: {
+  leftAt: {
     type: Date,
-    default: Date.now
+    default: null
   }
 }, { timestamps: true });
 
@@ -35,5 +35,6 @@ const roomMemberSchema = new mongoose.Schema({
 roomMemberSchema.index({ roomId: 1, userId: 1 }, { unique: true });
 roomMemberSchema.index({ roomId: 1, status: 1 });
 roomMemberSchema.index({ roomId: 1, role: 1 });
+roomMemberSchema.index({ userId: 1, status: 1 });
 
 module.exports = mongoose.model('RoomMember', roomMemberSchema);

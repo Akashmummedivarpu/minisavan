@@ -2,22 +2,31 @@ const express = require('express');
 const router = express.Router();
 const MusicProvider = require('../services/MusicProvider');
 const Song = require('../models/Song');
+const User = require('../models/User');
 const authMiddleware = require('../middleware/authMiddleware');
 const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware');
+const logger = require('../utils/logger');
+const AppError = require('../utils/AppError');
+const ytSearch = require('yt-search');
 
-router.get('/search', async (req, res) => {
+router.get('/search', async (req, res, next) => {
     const query = req.query.query;
-    if (!query) return res.status(400).json({ error: 'Query parameter is required' });
-    
+    if (!query) return next(new AppError('Query parameter is required', 400, 'VALIDATION_ERROR'));
+
     try {
-        const results = await MusicProvider.search(query);
+        // Optional: exclude sources, e.g. ?exclude=youtube,soundcloud
+        // (used by the Trending rail to keep out low-quality video spam).
+        const exclude = typeof req.query.exclude === 'string' && req.query.exclude.trim()
+            ? req.query.exclude.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+            : [];
+        const results = await MusicProvider.search(query, { excludeSources: exclude });
         res.json(results);
     } catch (error) {
-        res.status(500).json({ error: 'Search failed' });
+        next(error);
     }
 });
 
-router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
+router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
     const id = req.params.id;
     const { title, artist, image } = req.query;
 
@@ -43,13 +52,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
                 await cachedSong.save();
             }
 
-            // Update user history if authenticated
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== cachedSong._id.toString());
-                req.user.history.unshift(cachedSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             const streamUrl = await MusicProvider.getYoutubeStream(cachedSong.youtubeId);
 
@@ -67,15 +70,10 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
 
         if (id.startsWith('gn_')) {
             const gaanaId = id.replace('gn_', '');
-            console.log(`Gaana fallback requested for ${gaanaId}, mapping to YouTube stream...`);
+            logger.warn({ gaanaId, requestId: req.id }, `Gaana fallback requested, mapping to YouTube stream...`);
             const song = await Song.findOne({ 'songId': id });
             if (song) {
-                if (req.user) {
-                    req.user.history = req.user.history.filter(s => s.toString() !== song._id.toString());
-                    req.user.history.unshift(song._id);
-                    if (req.user.history.length > 50) req.user.history.pop();
-                    await req.user.save();
-                }
+
 
                 const ytResults = await ytSearch(`${song.title} ${song.artist}`);
                 if (ytResults && ytResults.videos.length > 0) {
@@ -93,7 +91,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
                     }
                 }
             }
-            return res.status(404).json({ error: 'Gaana/YouTube stream extraction failed' });
+            return next(new AppError('Gaana/YouTube stream extraction failed', 404, 'NOT_FOUND'));
         }
 
         if (id.startsWith('sc_')) {
@@ -115,12 +113,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
                 await cachedSong.save();
             }
 
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== cachedSong._id.toString());
-                req.user.history.unshift(cachedSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             // For SoundCloud, we passed the URL directly into scId during search mapping
             const streamUrl = await MusicProvider.getSoundCloudStream(cachedSong.scId);
@@ -141,12 +134,7 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
             cachedSong.playedAt = Date.now();
             await cachedSong.save();
             
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== cachedSong._id.toString());
-                req.user.history.unshift(cachedSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
-            }
+
 
             const details = await MusicProvider.getSongDetails(id);
             if (details) {
@@ -156,41 +144,57 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res) => {
 
         const songData = await MusicProvider.getSongDetails(id);
         if (songData) {
-            const newSong = await Song.create({
-                songId: songData.id,
-                title: songData.title,
-                subtitle: songData.subtitle,
-                image: songData.image,
-                artist: songData.artist,
-                source: 'saavn'
-            });
-
-            if (req.user) {
-                req.user.history = req.user.history.filter(s => s.toString() !== newSong._id.toString());
-                req.user.history.unshift(newSong._id);
-                if (req.user.history.length > 50) req.user.history.pop();
-                await req.user.save();
+            let newSong;
+            try {
+                newSong = await Song.create({
+                    songId: songData.id,
+                    title: songData.title,
+                    subtitle: songData.subtitle,
+                    image: songData.image,
+                    artist: songData.artist,
+                    source: 'saavn'
+                });
+            } catch (error) {
+                // Handle E11000 duplicate key race (concurrent create for the same song)
+                if (error && error.code === 11000) {
+                    newSong = await Song.findOne({ songId: songData.id });
+                } else {
+                    throw error;
+                }
             }
 
             res.json(songData);
         } else {
-            res.status(404).json({ error: 'Song not found' });
+            return next(new AppError('Song not found', 404, 'NOT_FOUND'));
         }
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to fetch song details' });
+        next(error);
     }
 });
 
-router.get('/recommendations', async (req, res) => {
+router.get('/recommendations', optionalAuthMiddleware, async (req, res, next) => {
     const { artist, title } = req.query;
-    if (!artist && !title) return res.status(400).json({ error: 'Artist or title required' });
-    
+    if (!artist && !title) return next(new AppError('Artist or title required', 400, 'VALIDATION_ERROR'));
+
     try {
-        const recommendations = await MusicProvider.getRecommendations(artist, title);
+        // Personalize with the listener's taste profile when logged in
+        // (liked songs weigh 3x, recent history is recency-weighted).
+        let tasteFetcher;
+        if (req.user) {
+            const userId = req.user._id;
+            tasteFetcher = async () => {
+                const user = await User.findById(userId)
+                    .populate('likedSongs', 'songId title artist')
+                    .populate('history', 'songId title artist')
+                    .lean();
+                if (!user) return { liked: [], history: [] };
+                return { liked: user.likedSongs || [], history: user.history || [] };
+            };
+        }
+        const recommendations = await MusicProvider.getRecommendations(artist, title, { tasteFetcher });
         res.json(recommendations);
     } catch (error) {
-        res.status(500).json({ error: 'Recommendations failed' });
+        next(error);
     }
 });
 

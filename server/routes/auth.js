@@ -2,21 +2,23 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vibesphere-super-secret-key';
 
 // Register
-router.post('/register', async (req, res) => {
+router.post('/register', async (req, res, next) => {
   try {
     const { username, phoneNumber, avatar } = req.body;
     
     if (!username || !phoneNumber) {
-      return res.status(400).json({ error: 'Username and phone number are required' });
+      return next(new AppError('Username and phone number are required', 400, 'VALIDATION_ERROR'));
     }
 
     const existingUser = await User.findOne({ phoneNumber });
     if (existingUser) {
-      return res.status(400).json({ error: 'Phone number already in use' });
+      return next(new AppError('Phone number already in use', 409, 'DUPLICATE_RESOURCE'));
     }
 
     const user = new User({ username, phoneNumber, avatar });
@@ -24,39 +26,42 @@ router.post('/register', async (req, res) => {
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
     
+    logger.info({ userId: user._id, requestId: req.id }, 'USER_REGISTRATION_SUCCESS');
+
     res.status(201).json({
       token,
       user: { id: user._id, username: user.username, phoneNumber: user.phoneNumber, avatar: user.avatar }
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error during registration' });
+    next(error);
   }
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', async (req, res, next) => {
   try {
     const { phoneNumber } = req.body;
 
     if (!phoneNumber) {
-      return res.status(400).json({ error: 'Phone number is required' });
+      return next(new AppError('Phone number is required', 400, 'VALIDATION_ERROR'));
     }
 
     const user = await User.findOne({ phoneNumber });
     if (!user) {
-      return res.status(401).json({ error: 'Phone number not found. Please register.' });
+      logger.warn({ phoneNumber, requestId: req.id }, 'LOGIN_FAILED: Phone number not found');
+      return next(new AppError('Phone number not found. Please register.', 401, 'UNAUTHORIZED'));
     }
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+    logger.info({ userId: user._id, requestId: req.id }, 'LOGIN_SUCCESS');
 
     res.json({
       token,
       user: { id: user._id, username: user.username, phoneNumber: user.phoneNumber, avatar: user.avatar }
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error during login' });
+    next(error);
   }
 });
 

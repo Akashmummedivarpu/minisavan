@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { X, Loader2, ListMusic, Plus } from 'lucide-react';
 import { authenticatedFetch } from '../api';
 import { GenericSkeleton } from './SkeletonLoader';
+import { logger } from '../core/logger';
+import toast from 'react-hot-toast';
 
 interface Playlist {
   _id: string;
@@ -22,17 +24,20 @@ export default function AddToPlaylistModal({ isOpen, onClose, song }: AddToPlayl
 
   useEffect(() => {
     if (isOpen) {
-      fetchPlaylists();
+      const controller = new AbortController();
+      fetchPlaylists(controller.signal);
+      return () => controller.abort();
     }
   }, [isOpen]);
 
-  const fetchPlaylists = async () => {
+  const fetchPlaylists = async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await authenticatedFetch('/playlists');
+      const res = await authenticatedFetch('/playlists', { signal });
       setPlaylists(res);
-    } catch (err) {
-      console.error("Failed to fetch playlists", err);
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      logger.error("Failed to fetch playlists", err);
     } finally {
       setLoading(false);
     }
@@ -46,10 +51,11 @@ export default function AddToPlaylistModal({ isOpen, onClose, song }: AddToPlayl
         method: 'POST',
         body: JSON.stringify({ songId: song.id || song._id })
       });
-      // Optionally show a success toast here
+      toast.success('Added to playlist!');
       onClose();
     } catch (err) {
-      console.error("Failed to add to playlist", err);
+      logger.error("Failed to add to playlist", err);
+      toast.error('Failed to add to playlist');
     } finally {
       setAddingTo(null);
     }

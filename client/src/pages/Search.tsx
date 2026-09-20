@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search as SearchIcon, Play, Plus, X } from 'lucide-react';
+import { Search as SearchIcon, Play, Plus, X, ListPlus } from 'lucide-react';
 import { useRoomStore } from '../store';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import AuthModal from '../components/AuthModal';
 import { SongRowSkeleton } from '../components/SkeletonLoader';
 import UserProfileDropdown from '../components/UserProfileDropdown';
+import { authenticatedFetch } from '../api';
+import { logger } from '../core/logger';
 
 interface Song {
   id: string;
@@ -21,7 +23,8 @@ export default function Search() {
   const [loading, setLoading] = useState(false);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { user, setQueue } = useRoomStore();
+  const { user, setQueue, roomId, roomRole, queueAddSong } = useRoomStore();
+  const canQueue = !!user && !!roomId && roomRole !== 'MEMBER';
 
   useEffect(() => {
     if (!query.trim()) {
@@ -29,20 +32,24 @@ export default function Search() {
       return;
     }
 
+    const controller = new AbortController();
     const delayDebounceFn = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:3001/api/search?query=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        if (Array.isArray(data)) setResults(data);
-      } catch (error) {
-        console.error("Search failed:", error);
+        const res = await authenticatedFetch(`/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
+        if (Array.isArray(res)) setResults(res);
+      } catch (error: any) {
+        if (error.name === 'AbortError') return;
+        logger.error("Search failed:", error);
       } finally {
         setLoading(false);
       }
     }, 300);
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => {
+      clearTimeout(delayDebounceFn);
+      controller.abort();
+    };
   }, [query]);
 
   const handleAddClick = (e: React.MouseEvent, song: Song) => {
@@ -103,6 +110,15 @@ export default function Search() {
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  {canQueue && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); queueAddSong(song); }}
+                      className="w-10 h-10 rounded-full flex items-center justify-center bg-accent/15 hover:bg-accent/30 transition-colors text-accent border border-transparent hover:border-accent/30"
+                      title="Add to room queue"
+                    >
+                      <ListPlus size={18} />
+                    </button>
+                  )}
                   <button 
                     onClick={(e) => handleAddClick(e, song)}
                     className="w-10 h-10 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/20 transition-colors text-secondary hover:text-white border border-transparent hover:border-white/10"
@@ -110,7 +126,7 @@ export default function Search() {
                   >
                     <Plus size={18} />
                   </button>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 md:opacity-0 opacity-100 md:group-hover:opacity-100 transition-opacity">
                     <Play size={16} fill="currentColor" className="ml-1" />
                   </div>
                 </div>

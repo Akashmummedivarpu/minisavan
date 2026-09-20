@@ -1,0 +1,154 @@
+{
+  "project": "SonicRoom",
+  "description": "Social music app for synchronized group listening. Rooms let users listen to the same song together in real-time.",
+  "createdAt": "2026-09-01T00:00:00.000Z",
+  "lastUpdatedAt": "2026-09-20T06:00:00.000Z",
+  "session": "SESSION_10",
+  "techStack": {
+    "frontend": ["React 19", "TypeScript", "Vite 8", "Tailwind CSS v4", "Zustand 5", "Socket.io Client 4", "React Router 7", "Lucide React", "React Hot Toast"],
+    "backend": ["Node.js", "Express 5", "MongoDB Atlas (Mongoose 9)", "Socket.io Server 4", "JWT", "Pino"],
+    "musicSources": ["JioSaavn", "Gaana", "SoundCloud", "YouTube"]
+  },
+  "deployment": {
+    "url": "https://minisavan-webapp.vercel.app/",
+    "client": "Vercel (SPA rewrites in client/vercel.json)",
+    "server": "TBD"
+  },
+  "status": {
+    "summary": "Functional prototype. Core features work: multi-source streaming, synchronized rooms with drift correction, real-time chat/reactions, playlists, liked songs, phone auth, glassmorphic UI. The 4 non-security UI/UX fixes (Home active-rooms filter, room cover picker, host-leave queue clear, mobile dashboard layout) are CODED and E2E-VERIFIED locally on 2026-09-19. Only REDEPLOY (Render + Vercel) remains.",
+    "stage": "functional-prototype",
+    "commits": 1,
+    "activeTask": "4 non-security UI/UX fixes (Home empty state/playing filter, room cover picker, host-leave queue clear, mobile dashboard layout)"
+  },
+  "todos": {
+    "inProgress": [
+      "Redeploy server (Render) + client (Vercel) to reflect verified local fixes on live URL"
+    ],
+    "pending": [
+      "Fix committed .env file (server/.env) - remove secrets from git history (security - deferred)",
+      "Remove hardcoded JWT secret fallback in authMiddleware.js and auth.js (security - deferred)",
+      "Lock down CORS from '*' to configured origin (security - deferred)",
+      "Implement rate limiting (chat, reactions, room creation) per PRD",
+      "Add proper test framework (currently only ad-hoc test-*.js scripts)",
+      "Consider converting server to TypeScript / add Zod validation",
+      "Remove committed dist/ build output or add to gitignore",
+      "Implement missing PRD features: approval-required join, member removal by admin, notifications"
+    ],
+    "completed": [
+      "Create persistent session system (manifest + JSON)",
+      "Issue 1 (Home filter): E2E VERIFIED 2026-09-19 - live room card shows LIVE badge + now-playing + cover + host in mobile UI; empty state shows when nothing playable",
+      "Issue 2 (Room cover): E2E VERIFIED 2026-09-19 - coverImage persists on create and round-trips via GET /rooms",
+      "Issue 3 (Host-leave queue clear): E2E VERIFIED 2026-09-19 - listener receives room:queue-cleared (IDLE), server state resets (isPlaying false, track null)",
+      "Issue 4 (Mobile dashboard layout): VERIFIED numerically - chat bottom 671 vs 812 viewport, stage min-h 240",
+      "Build/lint/syntax 2026-09-19: npm run build OK, lint 0 errors, node --check OK"
+    ]
+  },
+  "knownIssues": [
+    {
+      "id": "SEC-1",
+      "category": "security",
+      "title": ".env file committed to repository",
+      "detail": "server/.env contains MongoDB URI, JWT secret. .gitignore lists .env but it was committed before being gitignored.",
+      "severity": "high"
+    },
+    {
+      "id": "SEC-2",
+      "category": "security",
+      "title": "Hardcoded JWT secret fallback",
+      "detail": "process.env.JWT_SECRET || 'vibesphere-super-secret-key' in authMiddleware.js and auth.js.",
+      "severity": "high"
+    },
+    {
+      "id": "SEC-3",
+      "category": "security",
+      "title": "Wildcard CORS",
+      "detail": "server.js line 23 sets origin '*' - noted for dev, should be locked down.",
+      "severity": "medium"
+    },
+    {
+      "id": "SEC-4",
+      "category": "security",
+      "title": "No password-based auth",
+      "detail": "Registration only username+phone, login only phone number. Design choice but security concern.",
+      "severity": "info"
+    },
+    {
+      "id": "ARCH-1",
+      "category": "architecture",
+      "title": "No monorepo/shared types",
+      "detail": "Docs describe packages/shared with shared TS types + Zod schemas, but code uses separate client/server with no shared package.",
+      "severity": "medium"
+    },
+    {
+      "id": "ARCH-2",
+      "category": "architecture",
+      "title": "Server is vanilla JS",
+      "detail": "Docs describe TypeScript throughout; server is plain JS with no transpilation.",
+      "severity": "medium"
+    },
+    {
+      "id": "ARCH-3",
+      "category": "architecture",
+      "title": "No rate limiting",
+      "detail": "Docs specify rate limits for chat/reactions/room creation but none implemented.",
+      "severity": "medium"
+    },
+    {
+      "id": "ARCH-4",
+      "category": "architecture",
+      "title": "No test framework",
+      "detail": "test-*.js files are ad-hoc manual scripts, not proper test suites.",
+      "severity": "medium"
+    },
+    {
+      "id": "CODE-1",
+      "category": "code-quality",
+      "title": "Excessive 'any' types in Zustand store",
+      "detail": "store.ts uses any for currentSong, queue, roomMembers, roomQueue.",
+      "severity": "low"
+    },
+    {
+      "id": "CODE-2",
+      "category": "code-quality",
+      "title": "Mystery YouTube player script files",
+      "detail": "server root has 1785954182119-player-script.js and 1785954182138-player-script.js (minified ~2000+ lines).",
+      "severity": "low"
+    }
+  ],
+  "decisions": [
+    "Phone-number based auth (no password) - chosen design",
+    "Server-authoritative playback state - never trust client position",
+    "Three-tier drift correction (<100ms ignore / 100-500ms gentle rate / >500ms hard seek)",
+    "Multi-source music fallback chain: JioSaavn -> Gaana -> SoundCloud -> YouTube"
+  ],
+  "context": {
+    "docs": [
+      "docs/product-requirements.md",
+      "docs/system-architecture.md",
+      "docs/database-design.md",
+      "docs/realtime-architecture.md",
+      "docs/ui-ux-ideology.md"
+    ],
+    "clientEntry": "client/src/main.tsx",
+    "serverEntry": "server/server.js",
+    "socketHandlers": "server/routes/socket.js",
+    "musicProvider": "server/services/MusicProvider.js",
+    "noAGENTS": "No AGENTS.md previously existed; created on 2026-09-01.",
+    "localDevServer": "Local server on localhost:3001 (node server.js, MongoDB Atlas via server/.env). Local client on localhost:5174 (5173 taken by labha-dashboard) with VITE_API_URL=http://localhost:3001/api and VITE_SOCKET_URL=http://localhost:3001. Note: JWT from live server is invalid on local server (different secret) - re-login as TestDJ (+911234567890) on local. Headless socket E2E via client/node_modules/socket.io-client; room:join takes {roomId,userId} directly (no socket auth).",
+    "stalePlayingNote": "4 rooms in shared DB have stale PLAYING playback states with 0 listeners and no track name (abandoned sessions; disconnect grace ends/transfers room but never resets PLAYING). Home correctly hides them (filter requires isPlaying && currentTrackName). Optional future: reap stale PLAYING when listeners hit 0 - deliberately out of scope.",
+    "verificationNote": "This model cannot read screenshot images; verify UI geometry numerically via chrome-devtools_evaluate_script bounding-box checks.",
+    "qaSweep2026-09-19": "40 API cases (36/40; 3 failures were test artifacts, 1 real bug M3), 19 socket cases (19/19), full browser UI flows mobile 375x812 + desktop 1440x900. Details + bug list in session.md QA section.",
+    "regression2026-09-20": "VERDICT STABLE. API 42/42, socket 23/23, build+lint clean, all node --check clean, browser smoke (mobile+desktop) passes, console clean, 1 server start no crashes, caps holding. New minor: B1 trending can surface YT junk, B2 verbose YT titles. DB cleaned (5 rooms left).",
+    "mediumFixes2026-09-20": "M1 room:ended toast+redirect (wiring placed; event nearly undeliverable by design, kept as defense). M2 join-failure error card (UI-verified; first attempt had unreachable error UI, caught by testing). M3 playlist remove ObjectId-guard (verified 200/200/no-op). M4 RoomMessage model + 50-history backfill (socket+UI verified). M5 join-by-code route + Rooms input + dashboard chip/copy + ?code= socket bypass (API/socket/UI verified). M6 PENDING request/approve/deny + admin UI + requester auto-join + modal selectors (10/10 socket + full UI loop verified). Bonus: room:join rejects unknown users (ghost memberships). Build+lint clean.",
+    "uiUpgrades2026-09-20": "1 queue system (queue-add/remove/play + queue-updated; Up Next manageable + visible pre-playback; search +Queue; socket 8/8 + UI verified). 2 reactions overlay (feed + float animation; UI-verified). 6 rooms Live-now/Open-rooms sections sorted by listeners (UI-verified). 3 chat avatars + timestamps (UI-verified). 4 dashboard Add-songs (UI-verified; fixed invite-chip overlap). 5 host/listener badges + hint (UI-verified). 7 mobile tabs Now/Queue/Chat + mobile header (switching + geometry + desktop-intact verified). Bonus fix: cross-room state bleed (boot-skip + seq reset). Regression 5/5 on change-track refactor.",
+    "taskFilesChanged": [
+      "server/routes/rooms.js (GET adds isPlaying/isPaused; POST accepts coverImage)",
+      "server/routes/socket.js (room:leave + room-ended clear queue/reset playback, emit room:queue-cleared)",
+      "client/src/components/CreateRoomModal.tsx (8-option cover selector, sends coverImage)",
+      "client/src/pages/Home.tsx (filter to playing rooms, empty state, now-playing card content)",
+      "client/src/pages/Rooms.tsx (room cover images + playing indicator on cards)",
+      "client/src/pages/RoomDashboard.tsx (mobile layout: compact stage + chat h-[45vh])",
+      "client/src/store.ts (added room:queue-cleared socket handler)"
+    ]
+  }
+}
