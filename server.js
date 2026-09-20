@@ -61,6 +61,9 @@ app.use('/api/user', authMiddleware, userRoutes);
 app.use('/api/playlists', authMiddleware, playlistRoutes);
 app.use('/api/rooms', roomRoutes);
 
+// Expose io to routes that need to push realtime events (e.g. room deletion)
+app.set('io', io);
+
 // Socket.io integration
 require('./routes/socket')(io);
 

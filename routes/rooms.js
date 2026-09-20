@@ -3,6 +3,8 @@ const router = express.Router();
 const Room = require('../models/Room');
 const RoomMember = require('../models/RoomMember');
 const RoomPlaybackState = require('../models/RoomPlaybackState');
+const RoomQueueItem = require('../models/RoomQueueItem');
+const RoomMessage = require('../models/RoomMessage');
 const authMiddleware = require('../middleware/authMiddleware');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
@@ -90,6 +92,36 @@ router.post('/', authMiddleware, async (req, res, next) => {
         logger.info({ roomId: room._id, userId: req.user._id, requestId: req.id }, 'ROOM_CREATED');
 
         res.status(201).json(room);
+    } catch (e) {
+        next(e);
+    }
+});
+
+// Delete a room (host only) — notifies members, then wipes all room data
+router.delete('/:id', authMiddleware, async (req, res, next) => {
+    try {
+        const room = await Room.findById(req.params.id);
+        if (!room) return next(new AppError('Room not found', 404, 'NOT_FOUND'));
+        if (room.hostId.toString() !== req.user._id.toString()) {
+            return next(new AppError('Only the host can delete this room', 403, 'FORBIDDEN'));
+        }
+
+        const roomId = room._id;
+        const io = req.app.get('io');
+        if (io) {
+            io.to(roomId.toString()).emit('room:ended', { message: 'Room deleted by the host.' });
+        }
+
+        await Promise.all([
+            RoomMember.deleteMany({ roomId }),
+            RoomPlaybackState.deleteMany({ roomId }),
+            RoomQueueItem.deleteMany({ roomId }),
+            RoomMessage.deleteMany({ roomId }),
+            Room.deleteOne({ _id: roomId })
+        ]);
+
+        logger.info({ roomId, userId: req.user._id, requestId: req.id }, 'ROOM_DELETED');
+        res.json({ success: true });
     } catch (e) {
         next(e);
     }

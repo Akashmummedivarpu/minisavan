@@ -311,73 +311,162 @@ module.exports = function(io) {
             }
         });
 
+        // Upsert a client-shaped song into the Songs collection; returns { trackId, trackName }
+        const upsertSong = async (song) => {
+            const songKey = song.id || song.songId || song._id;
+            if (!songKey) return { trackId: null, trackName: null };
+            const dbSong = await Song.findOneAndUpdate(
+                { songId: songKey },
+                {
+                    title: song.title || song.name,
+                    subtitle: song.subtitle,
+                    artist: song.artist,
+                    image: song.image || song.image_url,
+                    source: song.source || 'saavn',
+                    youtubeId: song.youtubeId
+                },
+                { upsert: true, new: true }
+            );
+            return { trackId: dbSong._id, trackName: dbSong.title };
+        };
+
+        // Set a room's current track (shared by change-track and queue-play)
+        const applyTrackChange = async (roomId, userId, song) => {
+            const { trackId, trackName } = song ? await upsertSong(song) : { trackId: null, trackName: null };
+
+            const newState = await RoomPlaybackState.findOneAndUpdate(
+                { roomId },
+                {
+                    $set: {
+                        currentTrackId: trackId,
+                        status: song ? 'PLAYING' : 'IDLE',
+                        positionMs: 0,
+                        stateTimestamp: Date.now(),
+                        updatedBy: userId
+                    },
+                    $inc: { sequenceNumber: 1 }
+                },
+                { new: true }
+            ).populate('currentTrackId');
+
+            // Update denormalized track info on Room
+            if (trackId) {
+                await Room.findByIdAndUpdate(roomId, {
+                    currentTrackId: song?.id || song?.songId || null,
+                    currentTrackName: trackName
+                });
+            } else {
+                await Room.findByIdAndUpdate(roomId, {
+                    currentTrackId: null,
+                    currentTrackName: null
+                });
+            }
+
+            io.to(roomId).emit('room:track-changed', {
+                currentSong: newState.currentTrackId,
+                status: newState.status,
+                positionMs: newState.positionMs,
+                stateTimestamp: newState.stateTimestamp,
+                sequenceNumber: newState.sequenceNumber
+            });
+            return newState;
+        };
+
+        // Broadcast the current QUEUED items of a room
+        const emitQueue = async (roomId) => {
+            const queue = await RoomQueueItem.find({ roomId, status: 'QUEUED' })
+                .sort({ position: 1 })
+                .populate('trackId')
+                .populate('addedBy', 'username')
+                .lean();
+            io.to(roomId).emit('room:queue-updated', {
+                queue: queue.map(q => ({
+                    _id: q._id,
+                    track: q.trackId,
+                    addedBy: q.addedBy,
+                    position: q.position
+                }))
+            });
+        };
+
         socket.on('room:change-track', async ({ roomId, song }, callback) => {
             try {
                 const member = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
                 if (!member) return callback && callback({ error: 'Permission denied' });
 
-                let trackId = null;
-                let trackName = null;
-                
-                if (song) {
-                    const songKey = song.id || song.songId || song._id;
-                    if (songKey) {
-                        const dbSong = await Song.findOneAndUpdate(
-                            { songId: songKey },
-                            { 
-                                title: song.title || song.name,
-                                subtitle: song.subtitle,
-                                artist: song.artist,
-                                image: song.image,
-                                source: song.source || 'saavn',
-                                youtubeId: song.youtubeId
-                            },
-                            { upsert: true, new: true }
-                        );
-                        trackId = dbSong._id;
-                        trackName = dbSong.title;
-                    }
-                }
-
-                const newState = await RoomPlaybackState.findOneAndUpdate(
-                    { roomId },
-                    { 
-                        $set: { 
-                            currentTrackId: trackId,
-                            status: song ? 'PLAYING' : 'IDLE',
-                            positionMs: 0, 
-                            stateTimestamp: Date.now(), 
-                            updatedBy: socket.userId 
-                        },
-                        $inc: { sequenceNumber: 1 }
-                    },
-                    { new: true }
-                ).populate('currentTrackId');
-
-                // Update denormalized track info on Room
-                if (trackId) {
-                    await Room.findByIdAndUpdate(roomId, {
-                        currentTrackId: song?.id || song?.songId || null,
-                        currentTrackName: trackName
-                    });
-                } else {
-                    await Room.findByIdAndUpdate(roomId, {
-                        currentTrackId: null,
-                        currentTrackName: null
-                    });
-                }
-
-                io.to(roomId).emit('room:track-changed', {
-                    currentSong: newState.currentTrackId,
-                    status: newState.status,
-                    positionMs: newState.positionMs,
-                    stateTimestamp: newState.stateTimestamp,
-                    sequenceNumber: newState.sequenceNumber
-                });
+                await applyTrackChange(roomId, socket.userId, song);
 
                 if (callback) callback({ success: true });
             } catch(e) {
                 logger.error({ err: e, roomId, userId: socket.userId }, "Change track error");
+                if (callback) callback({ error: 'Server error' });
+            }
+        });
+
+        // Queue management (ADMIN/CONTROLLER only)
+        socket.on('room:queue-add', async ({ roomId, song }, callback) => {
+            try {
+                const member = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
+                if (!member) return callback && callback({ error: 'Permission denied' });
+                if (!song) return callback && callback({ error: 'Song required' });
+
+                const { trackId } = await upsertSong(song);
+                if (!trackId) return callback && callback({ error: 'Invalid song' });
+
+                const maxPos = await RoomQueueItem.findOne({ roomId, status: 'QUEUED' })
+                    .sort({ position: -1 })
+                    .select('position')
+                    .lean();
+                await RoomQueueItem.create({
+                    roomId,
+                    trackId,
+                    addedBy: socket.userId,
+                    position: (maxPos?.position ?? -1) + 1,
+                    status: 'QUEUED'
+                });
+                await emitQueue(roomId);
+                if (callback) callback({ success: true });
+            } catch (e) {
+                logger.error({ err: e, roomId, userId: socket.userId }, 'Queue add error');
+                if (callback) callback({ error: 'Server error' });
+            }
+        });
+
+        socket.on('room:queue-remove', async ({ roomId, queueItemId }, callback) => {
+            try {
+                const member = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
+                if (!member) return callback && callback({ error: 'Permission denied' });
+
+                await RoomQueueItem.findOneAndDelete({ _id: queueItemId, roomId, status: 'QUEUED' });
+                await emitQueue(roomId);
+                if (callback) callback({ success: true });
+            } catch (e) {
+                logger.error({ err: e, roomId, userId: socket.userId }, 'Queue remove error');
+                if (callback) callback({ error: 'Server error' });
+            }
+        });
+
+        // Play a queued item immediately (removes it from the queue)
+        socket.on('room:queue-play', async ({ roomId, queueItemId }, callback) => {
+            try {
+                const member = await checkPermission(socket.userId, roomId, ['ADMIN', 'CONTROLLER']);
+                if (!member) return callback && callback({ error: 'Permission denied' });
+
+                const item = await RoomQueueItem.findOne({ _id: queueItemId, roomId, status: 'QUEUED' })
+                    .populate('trackId');
+                if (!item || !item.trackId) return callback && callback({ error: 'Queued song not found' });
+
+                await RoomQueueItem.deleteOne({ _id: item._id });
+                const t = item.trackId;
+                await applyTrackChange(roomId, socket.userId, {
+                    id: t.songId, songId: t.songId, title: t.title,
+                    artist: t.artist, image: t.image, source: t.source,
+                    youtubeId: t.youtubeId
+                });
+                await emitQueue(roomId);
+                if (callback) callback({ success: true });
+            } catch (e) {
+                logger.error({ err: e, roomId, userId: socket.userId }, 'Queue play error');
                 if (callback) callback({ error: 'Server error' });
             }
         });

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const MusicProvider = require('../services/MusicProvider');
 const Song = require('../models/Song');
+const User = require('../models/User');
 const authMiddleware = require('../middleware/authMiddleware');
 const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware');
 const logger = require('../utils/logger');
@@ -11,9 +12,14 @@ const ytSearch = require('yt-search');
 router.get('/search', async (req, res, next) => {
     const query = req.query.query;
     if (!query) return next(new AppError('Query parameter is required', 400, 'VALIDATION_ERROR'));
-    
+
     try {
-        const results = await MusicProvider.search(query);
+        // Optional: exclude sources, e.g. ?exclude=youtube,soundcloud
+        // (used by the Trending rail to keep out low-quality video spam).
+        const exclude = typeof req.query.exclude === 'string' && req.query.exclude.trim()
+            ? req.query.exclude.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+            : [];
+        const results = await MusicProvider.search(query, { excludeSources: exclude });
         res.json(results);
     } catch (error) {
         next(error);
@@ -166,12 +172,26 @@ router.get('/song/:id', optionalAuthMiddleware, async (req, res, next) => {
     }
 });
 
-router.get('/recommendations', async (req, res, next) => {
+router.get('/recommendations', optionalAuthMiddleware, async (req, res, next) => {
     const { artist, title } = req.query;
     if (!artist && !title) return next(new AppError('Artist or title required', 400, 'VALIDATION_ERROR'));
-    
+
     try {
-        const recommendations = await MusicProvider.getRecommendations(artist, title);
+        // Personalize with the listener's taste profile when logged in
+        // (liked songs weigh 3x, recent history is recency-weighted).
+        let tasteFetcher;
+        if (req.user) {
+            const userId = req.user._id;
+            tasteFetcher = async () => {
+                const user = await User.findById(userId)
+                    .populate('likedSongs', 'songId title artist')
+                    .populate('history', 'songId title artist')
+                    .lean();
+                if (!user) return { liked: [], history: [] };
+                return { liked: user.likedSongs || [], history: user.history || [] };
+            };
+        }
+        const recommendations = await MusicProvider.getRecommendations(artist, title, { tasteFetcher });
         res.json(recommendations);
     } catch (error) {
         next(error);
